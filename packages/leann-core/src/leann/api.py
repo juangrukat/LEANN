@@ -31,6 +31,37 @@ from .registry import BACKEND_REGISTRY
 logger = logging.getLogger(__name__)
 
 
+def _metadata_header(metadata: dict[str, Any]) -> str:
+    header_keys = (
+        "source",
+        "type",
+        "chapter",
+        "path",
+        "file_path",
+        "section",
+        "file_name",
+    )
+    lines = []
+    for key in header_keys:
+        value = metadata.get(key)
+        if value is None or value == "":
+            continue
+        display_key = "path" if key == "file_path" else key
+        line = f"{display_key}: {value}"
+        if line not in lines:
+            lines.append(line)
+    return "\n".join(lines)
+
+
+def _text_with_metadata_header(text: str, metadata: dict[str, Any]) -> str:
+    header = _metadata_header(metadata)
+    if not header:
+        return text
+    if text.startswith(header):
+        return text
+    return f"{header}\n\n{text}"
+
+
 def get_registered_backends() -> list[str]:
     """Get list of registered backend names."""
     return list(BACKEND_REGISTRY.keys())
@@ -461,7 +492,11 @@ class LeannBuilder:
         if metadata is None:
             metadata = {}
         passage_id = metadata.get("id", str(len(self.chunks)))
-        chunk_data = {"id": passage_id, "text": text, "metadata": metadata}
+        chunk_data = {
+            "id": passage_id,
+            "text": _text_with_metadata_header(text, metadata),
+            "metadata": metadata,
+        }
         self.chunks.append(chunk_data)
 
     def build_index(self, index_path: str):

@@ -3,6 +3,7 @@ import os
 import pickle
 from dataclasses import dataclass, field
 from hashlib import sha256
+from pathlib import Path
 from typing import Optional
 
 from llama_index.core import SimpleDirectoryReader
@@ -77,6 +78,7 @@ class FileSynchronizer:
         root_dir: str,
         ignore_patterns: Optional[list] = None,
         include_extensions: Optional[list] = None,
+        explicit_files: Optional[list[str]] = None,
         auto_load=True,
         snapshot_path: Optional[str] = None,
     ):
@@ -85,6 +87,7 @@ class FileSynchronizer:
         self.root_dir = root_dir
         self.ignore_patterns = ignore_patterns
         self.include_extensions = include_extensions
+        self.explicit_files = [str(Path(path).resolve()) for path in explicit_files or []]
         self._custom_snapshot_path = snapshot_path
         self._pending_tree: Optional[MerkleTree] = None
         self.tree: Optional[MerkleTree] = None
@@ -93,6 +96,17 @@ class FileSynchronizer:
 
     def generate_file_hashes(self):
         file_hashes = {}
+        if self.explicit_files:
+            for path in self.explicit_files:
+                if not os.path.exists(path):
+                    continue
+                try:
+                    with open(path, "rb") as f:
+                        file_hashes[path] = hash_data(f.read())
+                except Exception:
+                    logger.error(f"Cannot hash file {path}")
+            return file_hashes
+
         try:
             reader = SimpleDirectoryReader(
                 self.root_dir,

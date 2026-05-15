@@ -91,6 +91,40 @@ def _write_vectors_to_bin(data: np.ndarray, file_path: Path):
         f.write(data.tobytes())
 
 
+def _run_diskann_build(
+    work_dir: str,
+    metric: Any,
+    data_file: str,
+    prefix: str,
+    complexity: int,
+    graph_degree: int,
+    search_mem: float,
+    build_mem: float,
+    num_threads: int,
+    pq_disk_bytes: int,
+    out_q: "mp.Queue[tuple[bool, str]]",
+) -> None:
+    try:
+        from . import _diskannpy as diskannpy  # type: ignore
+
+        with chdir(work_dir):
+            diskannpy.build_disk_float_index(
+                metric,
+                data_file,
+                prefix,
+                complexity,
+                graph_degree,
+                search_mem,
+                build_mem,
+                num_threads,
+                pq_disk_bytes,
+                "",
+            )
+        out_q.put((True, "ok"))
+    except Exception as e:
+        out_q.put((False, str(e)))
+
+
 def _calculate_smart_memory_config(data: np.ndarray) -> tuple[float, float]:
     """
     Calculate smart memory configuration for DiskANN based on data size and system specs.
@@ -269,42 +303,9 @@ class DiskannBuilder(LeannBackendBuilderInterface):
         try:
             # Build in a child process so native crashes/exits in diskannpy
             # do not terminate the main CLI process silently.
-            def _run_build(
-                work_dir: str,
-                metric: Any,
-                data_file: str,
-                prefix: str,
-                complexity: int,
-                graph_degree: int,
-                search_mem: float,
-                build_mem: float,
-                num_threads: int,
-                pq_disk_bytes: int,
-                out_q: "mp.Queue[tuple[bool, str]]",
-            ) -> None:
-                try:
-                    from . import _diskannpy as diskannpy  # type: ignore
-
-                    with chdir(work_dir):
-                        diskannpy.build_disk_float_index(
-                            metric,
-                            data_file,
-                            prefix,
-                            complexity,
-                            graph_degree,
-                            search_mem,
-                            build_mem,
-                            num_threads,
-                            pq_disk_bytes,
-                            "",
-                        )
-                    out_q.put((True, "ok"))
-                except Exception as e:
-                    out_q.put((False, str(e)))
-
             queue: mp.Queue[tuple[bool, str]] = mp.Queue()
             proc = mp.Process(
-                target=_run_build,
+                target=_run_diskann_build,
                 args=(
                     str(index_dir),
                     metric_enum,

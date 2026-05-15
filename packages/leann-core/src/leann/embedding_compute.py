@@ -325,7 +325,7 @@ def compute_embeddings(
     batch_size: int = 32,
     adaptive_optimization: bool = True,
     manual_tokenize: bool = False,
-    max_length: int = 512,
+    max_length: int = 1024,
     provider_options: Optional[dict[str, Any]] = None,
 ) -> np.ndarray:
     """
@@ -352,6 +352,8 @@ def compute_embeddings(
     if "batch_size" in provider_options:
         batch_size = provider_options["batch_size"]
         adaptive_optimization = False  # User-specified batch_size takes precedence
+    if "max_length" in provider_options:
+        max_length = max(1, int(provider_options["max_length"]))
 
     if mode == "sentence-transformers":
         inner_start_time = time.time()
@@ -405,7 +407,7 @@ def compute_embeddings_sentence_transformers(
     is_build: bool = False,
     adaptive_optimization: bool = True,
     manual_tokenize: bool = False,
-    max_length: int = 512,
+    max_length: int = 1024,
 ) -> np.ndarray:
     """
     Compute embeddings using SentenceTransformer with model caching and adaptive optimization
@@ -447,7 +449,7 @@ def compute_embeddings_sentence_transformers(
         if device == "mps":
             batch_size = 128  # MPS optimal batch size from benchmark
             if model_name == "Qwen/Qwen3-Embedding-0.6B":
-                batch_size = 32
+                batch_size = 8
         elif device == "cuda":
             batch_size = 256  # CUDA optimal batch size
         # Keep original batch_size for CPU
@@ -586,7 +588,7 @@ def compute_embeddings_sentence_transformers(
                 logger.warning(f"FP16 optimization failed: {e}")
 
         # Apply torch.compile optimization
-        if device in ["cuda", "mps"]:
+        if device == "cuda":
             try:
                 model = torch.compile(model, mode="reduce-overhead", dynamic=True)
                 logger.info(f"Applied torch.compile optimization: {model_name}")
@@ -594,6 +596,8 @@ def compute_embeddings_sentence_transformers(
                 logger.warning(f"torch.compile optimization failed: {e}")
 
         model = cast(_SentenceTransformerLike, model)
+        if hasattr(model, "max_seq_length"):
+            model.max_seq_length = max_length
 
         # Set model to eval mode and disable gradients for inference
         model.eval()
@@ -615,15 +619,20 @@ def compute_embeddings_sentence_transformers(
     start_time = time.time()
     if not manual_tokenize:
         # Use SentenceTransformer's optimized encode path (default)
+        sorted_indices = sorted(range(len(texts)), key=lambda i: len(texts[i]))
+        sorted_texts = [texts[i] for i in sorted_indices]
         with torch.inference_mode():
-            embeddings = model.encode(
-                texts,
+            sorted_embeddings = model.encode(
+                sorted_texts,
                 batch_size=batch_size,
                 show_progress_bar=is_build,  # Don't show progress bar in server environment
                 convert_to_numpy=True,
                 normalize_embeddings=False,
                 device=device,
             )
+        embeddings = np.empty_like(sorted_embeddings)
+        for sorted_pos, original_pos in enumerate(sorted_indices):
+            embeddings[original_pos] = sorted_embeddings[sorted_pos]
         # Synchronize if CUDA to measure accurate wall time
         try:
             if torch.cuda.is_available():

@@ -27,6 +27,13 @@ except ImportError:
 
 from leann.registry import register_project_directory
 
+DEFAULT_EMBEDDING_MODEL = "Qwen/Qwen3-Embedding-0.6B"
+DEFAULT_BACKEND_NAME = "diskann"
+DEFAULT_BUILD_COMPLEXITY = 128
+DEFAULT_SEARCH_COMPLEXITY = 64
+DEFAULT_TOP_K = 35
+DEFAULT_GRAPH_DEGREE = 64
+
 # Optional import: older PyPI builds may not include settings
 try:
     from leann.settings import resolve_ollama_host, resolve_openai_api_key, resolve_openai_base_url
@@ -96,12 +103,12 @@ class BaseRAGExample(ABC):
         # Embedding parameters
         embedding_group = parser.add_argument_group("Embedding Parameters")
         # Allow subclasses to override default embedding_model
-        embedding_model_default = getattr(self, "embedding_model_default", "facebook/contriever")
+        embedding_model_default = getattr(self, "embedding_model_default", DEFAULT_EMBEDDING_MODEL)
         embedding_group.add_argument(
             "--embedding-model",
             type=str,
             default=embedding_model_default,
-            help=f"Embedding model to use (default: {embedding_model_default}), we provide facebook/contriever, text-embedding-3-small,mlx-community/Qwen3-Embedding-0.6B-8bit or nomic-embed-text",
+            help=f"Embedding model to use (default: {embedding_model_default})",
         )
         embedding_group.add_argument(
             "--embedding-mode",
@@ -127,6 +134,18 @@ class BaseRAGExample(ABC):
             type=str,
             default=None,
             help="API key for embedding service (defaults to OPENAI_API_KEY)",
+        )
+        embedding_group.add_argument(
+            "--embedding-batch-size",
+            type=int,
+            default=None,
+            help="Override local embedding batch size for memory-constrained devices",
+        )
+        embedding_group.add_argument(
+            "--embedding-max-length",
+            type=int,
+            default=None,
+            help="Override local embedding tokenizer max sequence length",
         )
 
         # LLM parameters
@@ -174,20 +193,21 @@ class BaseRAGExample(ABC):
         ast_group = parser.add_argument_group("AST Chunking Parameters")
         ast_group.add_argument(
             "--use-ast-chunking",
-            action="store_true",
-            help="Enable AST-aware chunking for code files (requires astchunk)",
+            action=argparse.BooleanOptionalAction,
+            default=True,
+            help="Enable AST-aware chunking for code files (default: true; requires astchunk)",
         )
         ast_group.add_argument(
             "--ast-chunk-size",
             type=int,
-            default=300,
-            help="Maximum CHARACTERS per AST chunk (default: 300). Final chunks may be larger due to overlap. For 512 token models: recommended 300 chars",
+            default=1024,
+            help="Maximum CHARACTERS per AST chunk (default: 1024). Final chunks may be larger due to overlap.",
         )
         ast_group.add_argument(
             "--ast-chunk-overlap",
             type=int,
-            default=64,
-            help="Overlap between AST chunks in CHARACTERS (default: 64). Added to chunk size, not included in it",
+            default=180,
+            help="Overlap between AST chunks in CHARACTERS (default: 180). Added to chunk size, not included in it",
         )
         ast_group.add_argument(
             "--code-file-extensions",
@@ -205,13 +225,16 @@ class BaseRAGExample(ABC):
         # Search parameters
         search_group = parser.add_argument_group("Search Parameters")
         search_group.add_argument(
-            "--top-k", type=int, default=20, help="Number of results to retrieve (default: 20)"
+            "--top-k",
+            type=int,
+            default=DEFAULT_TOP_K,
+            help=f"Number of results to retrieve (default: {DEFAULT_TOP_K})",
         )
         search_group.add_argument(
             "--search-complexity",
             type=int,
-            default=32,
-            help="Search complexity for graph traversal (default: 64)",
+            default=DEFAULT_SEARCH_COMPLEXITY,
+            help=f"Search complexity for graph traversal (default: {DEFAULT_SEARCH_COMPLEXITY})",
         )
 
         # Index building parameters
@@ -219,21 +242,21 @@ class BaseRAGExample(ABC):
         index_group.add_argument(
             "--backend-name",
             type=str,
-            default="hnsw",
+            default=DEFAULT_BACKEND_NAME,
             choices=["hnsw", "diskann"],
-            help="Backend to use for index (default: hnsw)",
+            help=f"Backend to use for index (default: {DEFAULT_BACKEND_NAME})",
         )
         index_group.add_argument(
             "--graph-degree",
             type=int,
-            default=32,
-            help="Graph degree for index construction (default: 32)",
+            default=DEFAULT_GRAPH_DEGREE,
+            help=f"Graph degree for index construction (default: {DEFAULT_GRAPH_DEGREE})",
         )
         index_group.add_argument(
             "--build-complexity",
             type=int,
-            default=64,
-            help="Build complexity for index construction (default: 64)",
+            default=DEFAULT_BUILD_COMPLEXITY,
+            help=f"Build complexity for index construction (default: {DEFAULT_BUILD_COMPLEXITY})",
         )
         index_group.add_argument(
             "--no-compact",
@@ -290,6 +313,10 @@ class BaseRAGExample(ABC):
         print(f"Total text chunks: {len(texts)}")
 
         embedding_options: dict[str, Any] = {}
+        if args.embedding_batch_size is not None:
+            embedding_options["batch_size"] = max(1, int(args.embedding_batch_size))
+        if args.embedding_max_length is not None:
+            embedding_options["max_length"] = max(1, int(args.embedding_max_length))
         if args.embedding_mode == "ollama":
             embedding_options["host"] = resolve_ollama_host(args.embedding_host)
         elif args.embedding_mode == "openai":

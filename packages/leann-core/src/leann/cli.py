@@ -30,6 +30,19 @@ from .settings import (
 )
 from .sync import FileSynchronizer
 
+DEFAULT_EMBEDDING_MODEL = "Qwen/Qwen3-Embedding-0.6B"
+DEFAULT_BACKEND_NAME = "diskann"
+DEFAULT_DOC_CHUNK_SIZE = 768
+DEFAULT_DOC_CHUNK_OVERLAP = 160
+DEFAULT_CODE_CHUNK_SIZE = 1024
+DEFAULT_CODE_CHUNK_OVERLAP = 180
+DEFAULT_AST_CHUNK_SIZE = 1024
+DEFAULT_AST_CHUNK_OVERLAP = 180
+DEFAULT_BUILD_COMPLEXITY = 128
+DEFAULT_SEARCH_COMPLEXITY = 64
+DEFAULT_TOP_K = 35
+DEFAULT_GRAPH_DEGREE = 64
+
 
 def _normalize_path(path: str) -> str:
     """Return absolute path string for consistent keys."""
@@ -135,13 +148,16 @@ class LeannCLI:
 
         # Default parser for documents
         self.node_parser = SentenceSplitter(
-            chunk_size=256, chunk_overlap=128, separator=" ", paragraph_separator="\n\n"
+            chunk_size=DEFAULT_DOC_CHUNK_SIZE,
+            chunk_overlap=DEFAULT_DOC_CHUNK_OVERLAP,
+            separator=" ",
+            paragraph_separator="\n\n",
         )
 
         # Code-optimized parser
         self.code_parser = SentenceSplitter(
-            chunk_size=512,  # Larger chunks for code context
-            chunk_overlap=50,  # Less overlap to preserve function boundaries
+            chunk_size=DEFAULT_CODE_CHUNK_SIZE,
+            chunk_overlap=DEFAULT_CODE_CHUNK_OVERLAP,
             separator="\n",  # Split by lines for code
             paragraph_separator="\n\n",  # Preserve logical code blocks
         )
@@ -211,15 +227,15 @@ Examples:
         build_parser.add_argument(
             "--backend-name",
             type=str,
-            default="hnsw",
+            default=DEFAULT_BACKEND_NAME,
             choices=["hnsw", "diskann", "ivf"],
-            help="Backend to use (default: hnsw)",
+            help=f"Backend to use (default: {DEFAULT_BACKEND_NAME})",
         )
         build_parser.add_argument(
             "--embedding-model",
             type=str,
-            default="facebook/contriever",
-            help="Embedding model (default: facebook/contriever)",
+            default=DEFAULT_EMBEDDING_MODEL,
+            help=f"Embedding model (default: {DEFAULT_EMBEDDING_MODEL})",
         )
         build_parser.add_argument(
             "--embedding-mode",
@@ -247,6 +263,18 @@ Examples:
             help="API key for embedding service (defaults to OPENAI_API_KEY)",
         )
         build_parser.add_argument(
+            "--embedding-batch-size",
+            type=int,
+            default=None,
+            help="Override local embedding batch size for memory-constrained devices",
+        )
+        build_parser.add_argument(
+            "--embedding-max-length",
+            type=int,
+            default=None,
+            help="Override local embedding tokenizer max sequence length",
+        )
+        build_parser.add_argument(
             "--embedding-prompt-template",
             type=str,
             default=None,
@@ -265,17 +293,25 @@ Examples:
             help="Force full rebuild of existing index (without this, build does incremental update: add new files only)",
         )
         build_parser.add_argument(
-            "--graph-degree", type=int, default=32, help="Graph degree (default: 32)"
+            "--graph-degree",
+            type=int,
+            default=DEFAULT_GRAPH_DEGREE,
+            help=f"Graph degree (default: {DEFAULT_GRAPH_DEGREE})",
         )
         build_parser.add_argument(
-            "--complexity", type=int, default=64, help="Build complexity (default: 64)"
+            "--complexity",
+            "--build-complexity",
+            dest="complexity",
+            type=int,
+            default=DEFAULT_BUILD_COMPLEXITY,
+            help=f"Build complexity (default: {DEFAULT_BUILD_COMPLEXITY})",
         )
         build_parser.add_argument("--num-threads", type=int, default=1)
         build_parser.add_argument(
             "--compact",
             action=argparse.BooleanOptionalAction,
-            default=False,
-            help="Use compact (CSR) graph storage. Compact indices are read-only and cannot be updated incrementally. Default: false (allows incremental updates while still pruning embeddings for 97%% compression).",
+            default=True,
+            help="Use compact graph storage (default: true). Compact indices are read-only and cannot be updated incrementally.",
         )
         build_parser.add_argument(
             "--recompute",
@@ -297,43 +333,44 @@ Examples:
         build_parser.add_argument(
             "--doc-chunk-size",
             type=int,
-            default=256,
-            help="Document chunk size in TOKENS (default: 256). Final chunks may be larger due to overlap. For 512 token models: recommended 350 tokens (350 + 128 overlap = 478 max)",
+            default=DEFAULT_DOC_CHUNK_SIZE,
+            help=f"Document chunk size in TOKENS (default: {DEFAULT_DOC_CHUNK_SIZE}). Final chunks may be larger due to overlap.",
         )
         build_parser.add_argument(
             "--doc-chunk-overlap",
             type=int,
-            default=128,
-            help="Document chunk overlap in TOKENS (default: 128). Added to chunk size, not included in it",
+            default=DEFAULT_DOC_CHUNK_OVERLAP,
+            help=f"Document chunk overlap in TOKENS (default: {DEFAULT_DOC_CHUNK_OVERLAP}). Added to chunk size, not included in it",
         )
         build_parser.add_argument(
             "--code-chunk-size",
             type=int,
-            default=512,
-            help="Code chunk size in TOKENS (default: 512). Final chunks may be larger due to overlap. For 512 token models: recommended 400 tokens (400 + 50 overlap = 450 max)",
+            default=DEFAULT_CODE_CHUNK_SIZE,
+            help=f"Code chunk size in TOKENS (default: {DEFAULT_CODE_CHUNK_SIZE}). Final chunks may be larger due to overlap.",
         )
         build_parser.add_argument(
             "--code-chunk-overlap",
             type=int,
-            default=50,
-            help="Code chunk overlap in TOKENS (default: 50). Added to chunk size, not included in it",
+            default=DEFAULT_CODE_CHUNK_OVERLAP,
+            help=f"Code chunk overlap in TOKENS (default: {DEFAULT_CODE_CHUNK_OVERLAP}). Added to chunk size, not included in it",
         )
         build_parser.add_argument(
             "--use-ast-chunking",
-            action="store_true",
-            help="Enable AST-aware chunking for code files (requires astchunk)",
+            action=argparse.BooleanOptionalAction,
+            default=True,
+            help="Enable AST-aware chunking for code files (default: true; requires astchunk)",
         )
         build_parser.add_argument(
             "--ast-chunk-size",
             type=int,
-            default=300,
-            help="AST chunk size in CHARACTERS (non-whitespace) (default: 300). Final chunks may be larger due to overlap and expansion. For 512 token models: recommended 300 chars (300 + 64 overlap ~= 480 tokens)",
+            default=DEFAULT_AST_CHUNK_SIZE,
+            help=f"AST chunk size in CHARACTERS (non-whitespace) (default: {DEFAULT_AST_CHUNK_SIZE}). Final chunks may be larger due to overlap and expansion.",
         )
         build_parser.add_argument(
             "--ast-chunk-overlap",
             type=int,
-            default=64,
-            help="AST chunk overlap in CHARACTERS (default: 64). Added to chunk size, not included in it. ~1.2 tokens per character for code",
+            default=DEFAULT_AST_CHUNK_OVERLAP,
+            help=f"AST chunk overlap in CHARACTERS (default: {DEFAULT_AST_CHUNK_OVERLAP}). Added to chunk size, not included in it. ~1.2 tokens per character for code",
         )
         build_parser.add_argument(
             "--ast-fallback-traditional",
@@ -368,12 +405,21 @@ Examples:
         # Search command
         search_parser = subparsers.add_parser("search", help="Search documents")
         search_parser.add_argument("index_name", help="Index name")
-        search_parser.add_argument("query", help="Search query")
+        search_parser.add_argument("query", nargs="?", help="Search query")
+        search_parser.add_argument("--query", dest="query", help="Search query")
         search_parser.add_argument(
-            "--top-k", type=int, default=5, help="Number of results (default: 5)"
+            "--top-k",
+            type=int,
+            default=DEFAULT_TOP_K,
+            help=f"Number of results (default: {DEFAULT_TOP_K})",
         )
         search_parser.add_argument(
-            "--complexity", type=int, default=64, help="Search complexity (default: 64)"
+            "--complexity",
+            "--search-complexity",
+            dest="complexity",
+            type=int,
+            default=DEFAULT_SEARCH_COMPLEXITY,
+            help=f"Search complexity (default: {DEFAULT_SEARCH_COMPLEXITY})",
         )
         search_parser.add_argument("--beam-width", type=int, default=1)
         search_parser.add_argument("--prune-ratio", type=float, default=0.0)
@@ -526,9 +572,18 @@ Examples:
             "--interactive", "-i", action="store_true", help="Interactive chat mode"
         )
         ask_parser.add_argument(
-            "--top-k", type=int, default=20, help="Retrieval count (default: 20)"
+            "--top-k",
+            type=int,
+            default=DEFAULT_TOP_K,
+            help=f"Retrieval count (default: {DEFAULT_TOP_K})",
         )
-        ask_parser.add_argument("--complexity", type=int, default=32)
+        ask_parser.add_argument(
+            "--complexity",
+            "--search-complexity",
+            dest="complexity",
+            type=int,
+            default=DEFAULT_SEARCH_COMPLEXITY,
+        )
         ask_parser.add_argument("--beam-width", type=int, default=1)
         ask_parser.add_argument("--prune-ratio", type=float, default=0.0)
         ask_parser.add_argument(
@@ -630,7 +685,10 @@ Examples:
                 help=f"Index name (default: {default_name})",
             )
             p.add_argument(
-                "--embedding-model", type=str, default="facebook/contriever", help="Embedding model"
+                "--embedding-model",
+                type=str,
+                default=DEFAULT_EMBEDDING_MODEL,
+                help=f"Embedding model (default: {DEFAULT_EMBEDDING_MODEL})",
             )
             p.add_argument(
                 "--embedding-mode",
@@ -1747,6 +1805,10 @@ Examples:
     def _build_embedding_options(self, args) -> dict[str, Any]:
         """Build embedding provider options dict from CLI args."""
         opts: dict[str, Any] = {}
+        if getattr(args, "embedding_batch_size", None) is not None:
+            opts["batch_size"] = max(1, int(args.embedding_batch_size))
+        if getattr(args, "embedding_max_length", None) is not None:
+            opts["max_length"] = max(1, int(args.embedding_max_length))
         if args.embedding_mode == "ollama":
             opts["host"] = resolve_ollama_host(args.embedding_host)
         elif args.embedding_mode == "openai":
@@ -1804,10 +1866,36 @@ Examples:
         include_hidden: bool = False,
     ) -> list[FileSynchronizer]:
         """Create FileSynchronizers for build from docs_paths."""
-        roots = self._resolve_sync_roots(docs_paths)
         include_extensions = self._parse_file_types(file_types)
         ignore_patterns = self._sync_ignore_patterns(include_hidden)
-        return self._create_synchronizers(index_dir, roots, include_extensions, ignore_patterns)
+        explicit_by_parent: dict[str, list[str]] = {}
+        directory_roots: set[str] = set()
+        for path in docs_paths:
+            path_obj = Path(path).resolve()
+            if path_obj.is_file():
+                explicit_by_parent.setdefault(str(path_obj.parent), []).append(str(path_obj))
+            elif path_obj.is_dir():
+                directory_roots.add(str(path_obj))
+
+        synchronizers = self._create_synchronizers(
+            index_dir, sorted(directory_roots), include_extensions, ignore_patterns
+        )
+        for root, files in sorted(explicit_by_parent.items()):
+            tag = hashlib.sha256(("files:" + "|".join(sorted(files))).encode()).hexdigest()[:12]
+            snapshot_path = str(index_dir / f"sync_{tag}.pickle")
+            try:
+                synchronizers.append(
+                    FileSynchronizer(
+                        root_dir=root,
+                        ignore_patterns=ignore_patterns,
+                        include_extensions=include_extensions,
+                        explicit_files=files,
+                        snapshot_path=snapshot_path,
+                    )
+                )
+            except Exception as exc:
+                print(f"Warning: Failed to init synchronizer for {root}: {exc}")
+        return synchronizers
 
     def _detect_build_changes(
         self,

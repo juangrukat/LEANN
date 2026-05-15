@@ -376,7 +376,7 @@ LEANN_LLM_DEVICE             # GPU for HFChat LLM (e.g., cuda:1, or "cuda" for m
 --force-rebuild              # Force rebuild index even if it exists
 
 # Embedding Parameters
---embedding-model MODEL      # e.g., facebook/contriever, text-embedding-3-small, mlx-community/Qwen3-Embedding-0.6B-8bit or nomic-embed-text
+--embedding-model MODEL      # Default: Qwen/Qwen3-Embedding-0.6B
 --embedding-mode MODE        # sentence-transformers, openai, mlx, or ollama
 
 # LLM Parameters (Text generation models)
@@ -385,17 +385,17 @@ LEANN_LLM_DEVICE             # GPU for HFChat LLM (e.g., cuda:1, or "cuda" for m
 --thinking-budget LEVEL      # Thinking budget for reasoning models: low/medium/high (supported by o3, o3-mini, GPT-Oss:20b, and other reasoning models)
 
 # Search Parameters
---top-k N                    # Number of results to retrieve (default: 20)
---search-complexity N        # Search complexity for graph traversal (default: 32)
+--top-k N                    # Number of results to retrieve (default: 35)
+--search-complexity N        # Search complexity for graph traversal (default: 64)
 
 # Chunking Parameters
 --chunk-size N               # Size of text chunks (default varies by source: 256 for most, 192 for WeChat)
 --chunk-overlap N            # Overlap between chunks (default varies: 25-128 depending on source)
 
 # Index Building Parameters
---backend-name NAME          # Backend to use: hnsw or diskann (default: hnsw)
---graph-degree N             # Graph degree for index construction (default: 32)
---build-complexity N         # Build complexity for index construction (default: 64)
+--backend-name NAME          # Backend to use: hnsw or diskann (default: diskann)
+--graph-degree N             # Graph degree for index construction (default: 64)
+--build-complexity N         # Build complexity for index construction (default: 128)
 --compact / --no-compact     # Use compact storage (default: true). Must be `no-compact` for `no-recompute` build.
 --recompute / --no-recompute # Enable/disable embedding recomputation (default: enabled). Should not do a `no-recompute` search in a `recompute` build.
 ```
@@ -1136,10 +1136,12 @@ You can use `leann --help`, or `leann build --help`, `leann search --help`, `lea
 leann build INDEX_NAME --docs DIRECTORY|FILE [DIRECTORY|FILE ...] [OPTIONS]
 
 Options:
-  --backend {hnsw,diskann}     Backend to use (default: hnsw)
-  --embedding-model MODEL      Embedding model (default: facebook/contriever)
-  --graph-degree N             Graph degree (default: 32)
-  --complexity N               Build complexity (default: 64)
+  --backend-name {hnsw,diskann,ivf}
+                                  Backend to use (default: diskann)
+  --embedding-model MODEL      Embedding model (default: Qwen/Qwen3-Embedding-0.6B)
+  --graph-degree N             Graph degree (default: 64)
+  --complexity, --build-complexity N
+                                  Build complexity (default: 128)
   --force                      Force rebuild existing index
   --compact / --no-compact     Use compact storage (default: true). Must be `no-compact` for `no-recompute` build.
   --recompute / --no-recompute Enable recomputation (default: true)
@@ -1150,8 +1152,9 @@ Options:
 leann search INDEX_NAME QUERY [OPTIONS]
 
 Options:
-  --top-k N                     Number of results (default: 5)
-  --complexity N                Search complexity (default: 64)
+  --top-k N                     Number of results (default: 35)
+  --complexity, --search-complexity N
+                                  Search complexity (default: 64)
   --recompute / --no-recompute  Enable/disable embedding recomputation (default: enabled). Should not do a `no-recompute` search in a `recompute` build.
   --pruning-strategy {global,local,proportional}
 ```
@@ -1182,7 +1185,7 @@ Options:
   --llm {ollama,openai,hf,anthropic}    LLM provider (default: ollama)
   --model MODEL                         Model name (default: qwen3:8b)
   --interactive                         Interactive chat mode
-  --top-k N                             Retrieval count (default: 20)
+  --top-k N                             Retrieval count (default: 35)
 ```
 
 **List Command:**

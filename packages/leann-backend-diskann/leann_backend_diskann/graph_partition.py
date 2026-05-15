@@ -10,6 +10,7 @@ performance.
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Optional
@@ -70,9 +71,42 @@ class GraphPartitioner:
             if (graph_partition_dir / "build").exists():
                 shutil.rmtree(graph_partition_dir / "build")
 
-            # Run the build script
-            cmd = ["./build.sh", self.build_type, "split_graph", "/tmp/dummy"]
-            subprocess.run(cmd, capture_output=True, text=True, cwd=graph_partition_dir)
+            build_dir = graph_partition_dir / "build" / self.build_type
+            source_dir = graph_partition_dir.parent
+            configure_cmd = [
+                "cmake",
+                f"-DCMAKE_BUILD_TYPE={self.build_type.capitalize()}",
+                "-DPYBIND=OFF",
+                f"-DPython_EXECUTABLE={sys.executable}",
+                str(source_dir),
+                "-B",
+                str(build_dir),
+            ]
+            build_cmd = [
+                "cmake",
+                "--build",
+                str(build_dir),
+                "-j",
+                "--target",
+                "partitioner",
+                "index_relayout",
+            ]
+            configure = subprocess.run(
+                configure_cmd, capture_output=True, text=True, cwd=graph_partition_dir
+            )
+            if configure.returncode != 0:
+                raise RuntimeError(
+                    "Failed to configure graph partition executables:\n"
+                    f"stdout: {configure.stdout}\n"
+                    f"stderr: {configure.stderr}"
+                )
+            build = subprocess.run(build_cmd, capture_output=True, text=True, cwd=graph_partition_dir)
+            if build.returncode != 0:
+                raise RuntimeError(
+                    "Failed to build graph partition executables:\n"
+                    f"stdout: {build.stdout}\n"
+                    f"stderr: {build.stderr}"
+                )
 
             # Check if executables were created
             partitioner_path = self._get_executable_path("partitioner")
@@ -121,7 +155,7 @@ class GraphPartitioner:
             "cut": 100,
             "scale_factor": 1,
             "data_type": "float",
-            "thread_nums": 10,
+            "thread_nums": 1,
             **kwargs,
         }
 

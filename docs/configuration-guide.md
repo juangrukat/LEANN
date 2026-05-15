@@ -264,8 +264,51 @@ leann build my-docs \
 
 ## Index Selection: Matching Your Scale
 
+## Standard Local Profile
+
+For one local, general-purpose LEANN setup across programming documentation and English literary texts, use the default profile:
+
+```bash
+leann build unified-knowledge \
+  --docs ./corpus \
+  --backend-name diskann \
+  --embedding-mode sentence-transformers \
+  --embedding-model Qwen/Qwen3-Embedding-0.6B \
+  --doc-chunk-size 768 \
+  --doc-chunk-overlap 160 \
+  --code-chunk-size 1024 \
+  --code-chunk-overlap 180 \
+  --ast-chunk-size 1024 \
+  --ast-chunk-overlap 180 \
+  --use-ast-chunking \
+  --build-complexity 128 \
+  --graph-degree 64 \
+  --force
+```
+
+```bash
+leann search unified-knowledge \
+  --query "your question here" \
+  --search-complexity 64 \
+  --top-k 35
+```
+
+This is the repo standard because DiskANN gives headroom for a growing unified corpus, `Qwen/Qwen3-Embedding-0.6B` provides strong local semantic quality, 768-token document chunks balance literary precision with technical context, 1024-token code and AST chunks keep examples and API details together, and `top-k 35` gives complex questions enough candidate evidence. Compact storage and recomputation are enabled by default.
+
+When chunk metadata is available, LEANN includes a small metadata header in the embedded text, for example:
+
+```text
+source: Pride and Prejudice
+type: literature
+chapter: 34
+
+[chunk text...]
+```
+
+This helps one embedding model distinguish source, genre, path, chapter, and section context across mixed corpora.
+
 ### HNSW (Hierarchical Navigable Small World)
-**Best for**: Small to medium datasets (< 10M vectors) - **Default and recommended for extreme low storage**
+**Best for**: Small to medium datasets (< 10M vectors) and cases that need non-DiskANN installs
 - Full recomputation required
 - High memory usage during build phase
 - Excellent recall (95%+)
@@ -288,8 +331,8 @@ leann build my-docs \
 - `recompute=False`: PQ + partial real distances during traversal - slower but higher accuracy
 
 ```bash
-# Recommended for most use cases
---backend-name diskann --graph-degree 32 --build-complexity 64
+# Standard local profile
+--backend-name diskann --graph-degree 64 --build-complexity 128
 ```
 
 **Performance Benchmark**: Run `uv run benchmarks/diskann_vs_hnsw_speed_comparison.py` to compare DiskANN and HNSW on your system.
@@ -325,8 +368,8 @@ leann build my-docs \
 - Higher = better recall but slower build
 - Recommendations:
   - 32: Quick prototyping
-  - 64: Balanced (default)
-  - 128: Production systems
+  - 64: Balanced
+  - 128: Standard local profile / production systems (default)
   - 256: Maximum quality
 
 **`--search-complexity`** (query time)
@@ -343,8 +386,8 @@ leann build my-docs \
 - More chunks = better context but slower LLM processing
 - Should be always smaller than `--search-complexity`
 - Guidelines:
-  - 10-20: General questions (default: 20)
-  - 30+: Complex multi-hop reasoning requiring comprehensive context
+  - 10-20: General questions
+  - 30+: Complex multi-hop reasoning requiring comprehensive context (default: 35)
 
 **Trade-off formula**:
 - Retrieval time ∝ log(n) × search_complexity
